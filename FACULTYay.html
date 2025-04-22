@@ -1,0 +1,1203 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Faculty Work Hours Tracker</title>
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css" rel="stylesheet">
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background: #939dab;
+            background-image: url('hi.jpg');
+        }
+        .loader {
+            border: 4px solid #e1caca;
+            border-top: 4px solid #3498db;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        .punch-btn {
+            transition: all 0.3s ease;
+        }
+        .punch-btn:hover {
+            transform: scale(1.05);
+        }
+        .tab-active {
+            border-bottom: 2px solid #3b82f6;
+            color: #3b82f6;
+        }
+        .slide-fade-enter-active,
+        .slide-fade-leave-active {
+            transition: all 0.3s ease;
+        }
+        .slide-fade-enter-from,
+        .slide-fade-leave-to {
+            transform: translateX(20px);
+            opacity: 0;
+        }
+    </style>
+</head>
+<body>
+    <div id="app" class="min-h-screen">
+        <!-- Login Section -->
+        <div v-if="!isLoggedIn && !isAdminMode" class="min-h-screen flex items-center justify-center">
+            <div class="bg-white p-8 rounded-lg shadow-lg w-full max-w-md">
+                <h2 class="text-2xl font-bold mb-6 text-center">GRAPHIC ERA Faculty Work Hours Tracker</h2>
+                <div class="flex mb-6">
+                    <button 
+                        @click="activeTab = 'login'" 
+                        :class="['flex-1 py-2 text-center', activeTab === 'login' ? 'tab-active' : '']">
+                        Login
+                    </button>
+                    <button 
+                        @click="activeTab = 'admin'" 
+                        :class="['flex-1 py-2 text-center', activeTab === 'admin' ? 'tab-active' : '']">
+                        Admin Login
+                    </button>
+                </div>
+                
+                <form v-if="activeTab === 'login'" @submit.prevent="login" class="space-y-4">
+                    <div>
+                        <label class="block text-sm font-medium mb-1">Email</label>
+                        <input type="email" v-model="loginForm.email" class="w-full p-2 border rounded" required>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium mb-1">Password</label>
+                        <input type="password" v-model="loginForm.password" class="w-full p-2 border rounded" required>
+                    </div>
+                    <div class="flex justify-between items-center text-sm">
+                        <a href="#" @click="forgotPassword" class="text-blue-600 hover:underline">Forgot Password?</a>
+                        <a href="#" @click="showCaptcha" class="text-blue-600 hover:underline">Refresh Captcha</a>
+                    </div>
+                    <div class="captcha-container bg-gray-100 p-2 rounded text-center">
+                        <span class="font-mono text-lg">{{captchaText}}</span>
+                    </div>
+                    <input type="text" v-model="captchaInput" placeholder="Enter Captcha" class="w-full p-2 border rounded" required>
+                    <button type="submit" class="w-full bg-blue-600 text-white p-2 rounded hover:bg-blue-700">Login</button>
+                </form>
+                
+                <form v-if="activeTab === 'admin'" @submit.prevent="adminLogin" class="space-y-4">
+                    <div>
+                        <label class="block text-sm font-medium mb-1">Admin Username</label>
+                        <input type="text" v-model="adminForm.username" class="w-full p-2 border rounded" required>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium mb-1">Admin Password</label>
+                        <input type="password" v-model="adminForm.password" class="w-full p-2 border rounded" required>
+                    </div>
+                    <div class="captcha-container bg-gray-100 p-2 rounded text-center">
+                        <span class="font-mono text-lg">{{adminCaptchaText}}</span>
+                    </div>
+                    <input type="text" v-model="adminCaptchaInput" placeholder="Enter Captcha" class="w-full p-2 border rounded" required>
+                    <button type="submit" class="w-full bg-blue-600 text-white p-2 rounded hover:bg-blue-700">Admin Login</button>
+                </form>
+            </div>
+        </div>
+
+        <!-- Admin Panel -->
+        <div v-else-if="isAdminMode" class="container mx-auto px-4 py-8">
+            <header class="flex justify-between items-center mb-8">
+                <h1 class="text-2xl font-bold">Faculty Work Hours - Admin Panel</h1>
+                <button @click="logoutAdmin" class="bg-red-500 text-white px-4 py-2 rounded hover:bg-red-600">
+                    Logout
+                </button>
+            </header>
+            
+            <!-- Admin Navigation -->
+            <div class="bg-white shadow mb-6 rounded-lg overflow-hidden">
+                <div class="flex">
+                    <button 
+                        @click="adminTab = 'users'" 
+                        :class="['px-4 py-3 flex-1', adminTab === 'users' ? 'bg-blue-50 text-blue-600' : '']">
+                        <i class="bi bi-people mr-2"></i> Manage Users
+                    </button>
+                    <button 
+                        @click="adminTab = 'reports'" 
+                        :class="['px-4 py-3 flex-1', adminTab === 'reports' ? 'bg-blue-50 text-blue-600' : '']">
+                        <i class="bi bi-file-earmark-bar-graph mr-2"></i> Reports
+                    </button>
+                    <button 
+                        @click="adminTab = 'settings'" 
+                        :class="['px-4 py-3 flex-1', adminTab === 'settings' ? 'bg-blue-50 text-blue-600' : '']">
+                        <i class="bi bi-gear mr-2"></i> Settings
+                    </button>
+                </div>
+            </div>
+            
+            <!-- User Management Tab -->
+            <div v-if="adminTab === 'users'" class="bg-white p-6 rounded-lg shadow">
+                <div class="flex justify-between items-center mb-6">
+                    <h2 class="text-xl font-semibold">Faculty Management</h2>
+                    <button @click="showNewUserModal = true" class="bg-green-500 text-white px-4 py-2 rounded hover:bg-green-600">
+                        <i class="bi bi-plus-lg mr-2"></i> Add New Faculty
+                    </button>
+                </div>
+                
+                <!-- Search & Filter -->
+                <div class="flex mb-4 gap-4">
+                    <input 
+                        type="text" 
+                        v-model="userSearchQuery" 
+                        class="flex-grow p-2 border rounded" 
+                        placeholder="Search by name or email...">
+                    <select v-model="userFilterRole" class="p-2 border rounded">
+                        <option value="">All Roles</option>
+                        <option value="Assistant Professor">Assistant Professor</option>
+                        <option value="Professor">Professor</option>
+                        <option value="Other">Other</option>
+                    </select>
+                </div>
+                
+                <!-- Users Table -->
+                <div class="overflow-x-auto">
+                    <table class="w-full">
+                        <thead>
+                            <tr class="bg-gray-50">
+                                <th class="px-4 py-2 text-left">Name</th>
+                                <th class="px-4 py-2 text-left">Email</th>
+                                <th class="px-4 py-2 text-left">Designation</th>
+                                <th class="px-4 py-2 text-left">Weekly Target</th>
+                                <th class="px-4 py-2 text-left">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr v-for="user in filteredUsers" :key="user.id" class="border-b hover:bg-gray-50">
+                                <td class="px-4 py-3">{{user.name}}</td>
+                                <td class="px-4 py-3">{{user.email}}</td>
+                                <td class="px-4 py-3">{{user.role}}</td>
+                                <td class="px-4 py-3">{{user.weeklyTarget}} hrs</td>
+                                <td class="px-4 py-3">
+                                    <div class="flex gap-2">
+                                        <button @click="editUser(user)" class="text-blue-500 hover:text-blue-700">
+                                            <i class="bi bi-pencil"></i>
+                                        </button>
+                                        <button @click="deleteUser(user.id)" class="text-red-500 hover:text-red-700">
+                                            <i class="bi bi-trash"></i>
+                                        </button>
+                                        <button @click="resetUserPassword(user.id)" class="text-green-500 hover:text-green-700">
+                                            <i class="bi bi-key"></i>
+                                        </button>
+                                    </div>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            
+            <!-- Reports Tab -->
+            <div v-if="adminTab === 'reports'" class="bg-white p-6 rounded-lg shadow">
+                <h2 class="text-xl font-semibold mb-6">Work Hours Reports</h2>
+                
+                <!-- Report Filters -->
+                <div class="grid md:grid-cols-4 gap-4 mb-6">
+                    <div>
+                        <label class="block text-sm font-medium mb-1">Date Range</label>
+                        <select class="w-full p-2 border rounded">
+                            <option>This Week</option>
+                            <option>Last Week</option>
+                            <option>This Month</option>
+                            <option>Custom Range</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium mb-1">Department</label>
+                        <select class="w-full p-2 border rounded">
+                            <option>All Departments</option>
+                            <option>Computer Science</option>
+                            <option>Mathematics</option>
+                            <option>Engineering</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium mb-1">Designation</label>
+                        <select class="w-full p-2 border rounded">
+                            <option>All Designations</option>
+                            <option>Assistant Professor</option>
+                            <option>Professor</option>
+                            <option>Other</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium mb-1">&nbsp;</label>
+                        <button class="w-full bg-blue-600 text-white p-2 rounded hover:bg-blue-700">
+                            Generate Report
+                        </button>
+                    </div>
+                </div>
+                
+                <!-- Report Chart -->
+                <div class="border rounded-lg p-4 mb-6">
+                    <h3 class="text-lg font-semibold mb-4">Weekly Hours Compliance</h3>
+                    <div class="h-64">
+                        <canvas id="adminReportChart"></canvas>
+                    </div>
+                </div>
+                
+                <!-- Export Options -->
+                <div class="flex justify-end gap-3">
+                    <button class="px-4 py-2 border rounded hover:bg-gray-50">
+                        <i class="bi bi-file-earmark-excel mr-2"></i> Export Excel
+                    </button>
+                    <button class="px-4 py-2 border rounded hover:bg-gray-50">
+                        <i class="bi bi-file-earmark-pdf mr-2"></i> Export PDF
+                    </button>
+                    <button class="px-4 py-2 border rounded hover:bg-gray-50">
+                        <i class="bi bi-printer mr-2"></i> Print
+                    </button>
+                </div>
+            </div>
+            
+            <!-- Settings Tab -->
+            <div v-if="adminTab === 'settings'" class="bg-white p-6 rounded-lg shadow">
+                <h2 class="text-xl font-semibold mb-6">System Settings</h2>
+                
+                <div class="grid md:grid-cols-2 gap-8">
+                    <!-- Holiday Settings -->
+                    <div>
+                        <h3 class="text-lg font-medium mb-3">Holiday Calendar</h3>
+                        <div class="mb-4">
+                            <div class="flex gap-3 mb-2">
+                                <input type="date" class="flex-grow p-2 border rounded">
+                                <input type="text" placeholder="Holiday Name" class="flex-grow p-2 border rounded">
+                                <button class="bg-blue-600 text-white px-3 py-2 rounded hover:bg-blue-700">
+                                    <i class="bi bi-plus-lg"></i>
+                                </button>
+                            </div>
+                            
+                            <div class="max-h-64 overflow-y-auto border rounded">
+                                <table class="w-full">
+                                    <thead class="bg-gray-50">
+                                        <tr>
+                                            <th class="px-3 py-2 text-left">Date</th>
+                                            <th class="px-3 py-2 text-left">Holiday</th>
+                                            <th class="px-3 py-2 text-left">Action</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <tr class="border-b">
+                                            <td class="px-3 py-2">2023-01-01</td>
+                                            <td class="px-3 py-2">New Year's Day</td>
+                                            <td class="px-3 py-2">
+                                                <button class="text-red-500 hover:text-red-700">
+                                                    <i class="bi bi-trash"></i>
+                                                </button>
+                                            </td>
+                                        </tr>
+                                        <tr class="border-b">
+                                            <td class="px-3 py-2">2023-01-26</td>
+                                            <td class="px-3 py-2">Republic Day</td>
+                                            <td class="px-3 py-2">
+                                                <button class="text-red-500 hover:text-red-700">
+                                                    <i class="bi bi-trash"></i>
+                                                </button>
+                                            </td>
+                                        </tr>
+                                        <tr class="border-b">
+                                            <td class="px-3 py-2">2023-08-15</td>
+                                            <td class="px-3 py-2">Independence Day</td>
+                                            <td class="px-3 py-2">
+                                                <button class="text-red-500 hover:text-red-700">
+                                                    <i class="bi bi-trash"></i>
+                                                </button>
+                                            </td>
+                                        </tr>
+                                        <tr class="border-b">
+                                            <td class="px-3 py-2">2023-10-02</td>
+                                            <td class="px-3 py-2">Gandhi Jayanti</td>
+                                            <td class="px-3 py-2">
+                                                <button class="text-red-500 hover:text-red-700">
+                                                    <i class="bi bi-trash"></i>
+                                                </button>
+                                            </td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Hour Requirements -->
+                    <div>
+                        <h3 class="text-lg font-medium mb-3">Work Hour Requirements</h3>
+                        <div class="space-y-4">
+                            <div>
+                                <label class="block text-sm font-medium mb-1">Assistant Professor Weekly Hours</label>
+                                <input type="number" value="35" class="w-full p-2 border rounded">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium mb-1">Professor Weekly Hours</label>
+                                <input type="number" value="30" class="w-full p-2 border rounded">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium mb-1">Other Staff Weekly Hours</label>
+                                <input type="number" value="40" class="w-full p-2 border rounded">
+                            </div>
+                            
+                            <h3 class="text-lg font-medium mb-3 mt-6">Geo-Fencing Settings</h3>
+                            <div>
+                                <label class="block text-sm font-medium mb-1">Campus Location</label>
+                                <div class="flex gap-3">
+                                    <input type="text" placeholder="Latitude" value="30.316496" class="flex-1 p-2 border rounded">
+                                    <input type="text" placeholder="Longitude" value="78.032188" class="flex-1 p-2 border rounded">
+                                </div>
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium mb-1">Radius (in meters)</label>
+                                <input type="number" value="500" class="w-full p-2 border rounded">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="mt-6 flex justify-end">
+                    <button class="bg-blue-600 text-white px-6 py-2 rounded hover:bg-blue-700">
+                        Save Settings
+                    </button>
+                </div>
+            </div>
+            
+            <!-- Add/Edit User Modal -->
+            <div v-if="showNewUserModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+                <div class="bg-white rounded-lg shadow-xl w-full max-w-md p-6 max-h-[90vh] overflow-y-auto">
+                    <div class="flex justify-between items-center mb-4">
+                        <h3 class="text-xl font-semibold">{{editingUser ? 'Edit Faculty' : 'Add New Faculty'}}</h3>
+                        <button @click="closeUserModal" class="text-gray-500 hover:text-gray-700">
+                            <i class="bi bi-x-lg"></i>
+                        </button>
+                    </div>
+                    
+                    <form @submit.prevent="saveUser" class="space-y-4">
+                        <div>
+                            <label class="block text-sm font-medium mb-1">Full Name</label>
+                            <input type="text" v-model="newUser.name" class="w-full p-2 border rounded" required>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium mb-1">Email</label>
+                            <input type="email" v-model="newUser.email" class="w-full p-2 border rounded" required>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium mb-1">Designation</label>
+                            <select v-model="newUser.role" class="w-full p-2 border rounded" required>
+                                <option value="Assistant Professor">Assistant Professor</option>
+                                <option value="Professor">Professor</option>
+                                <option value="Other">Other</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium mb-1">Department</label>
+                            <select v-model="newUser.department" class="w-full p-2 border rounded" required>
+                                <option value="Computer Science">Computer Science</option>
+                                <option value="Mathematics">Mathematics</option>
+                                <option value="Engineering">Engineering</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium mb-1">Weekly Hour Target</label>
+                            <input type="number" v-model="newUser.weeklyTarget" class="w-full p-2 border rounded" required>
+                        </div>
+                        <div v-if="!editingUser">
+                            <label class="block text-sm font-medium mb-1">Initial Password</label>
+                            <input type="text" v-model="newUser.password" class="w-full p-2 border rounded" required>
+                            <p class="text-xs text-gray-500 mt-1">User will be prompted to change on first login</p>
+                        </div>
+                        <div class="pt-4 flex justify-end gap-3">
+                            <button type="button" @click="closeUserModal" class="px-4 py-2 border rounded">
+                                Cancel
+                            </button>
+                            <button type="submit" class="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">
+                                {{editingUser ? 'Update Faculty' : 'Add Faculty'}}
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <!-- Main Dashboard -->
+        <div v-else class="container mx-auto px-4 py-8">
+            <header class="flex flex-col md:flex-row justify-between items-center mb-8 gap-4">
+                <h1 class="text-2xl font-bold">Faculty Work Hours Tracker</h1>
+                <div class="flex items-center gap-4">
+                    <div class="text-right">
+                        <p class="font-medium">{{userData.name}}</p>
+                        <p class="text-sm text-gray-600">{{userData.role}}</p>
+                    </div>
+                    <button @click="logout" class="bg-red-500 text-white px-4 py-2 rounded hover:bg-red-600 flex items-center">
+                        <i class="bi bi-box-arrow-right mr-2"></i> Logout
+                    </button>
+                </div>
+            </header>
+
+            <!-- Alert Banner -->
+            <div v-if="showAlert" class="bg-yellow-50 border-l-4 border-yellow-500 p-4 mb-6 rounded shadow-sm">
+                <div class="flex">
+                    <div class="flex-shrink-0">
+                        <i class="bi bi-exclamation-triangle text-yellow-500 text-xl"></i>
+                    </div>
+                    <div class="ml-3">
+                        <p class="text-yellow-700">
+                            You need to complete <strong>{{remainingHours}} hours</strong> in the next <strong>{{remainingDays}} days</strong> to meet your weekly target.
+                        </p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Punch Controls -->
+            <div class="grid md:grid-cols-2 gap-6 mb-8">
+                <div class="bg-white p-6 rounded-lg shadow">
+                    <div class="flex justify-between items-center mb-4">
+                        <h2 class="text-xl font-semibold">Time Tracking</h2>
+                        <div class="text-sm text-gray-600">
+                            <p>Today: {{currentDate}}</p>
+                        </div>
+                    </div>
+                    <div class="flex gap-4">
+                        <button @click="punchIn" :disabled="isPunchedIn" 
+                                class="punch-btn flex-1 flex flex-col items-center justify-center bg-green-500 text-white p-4 rounded-lg disabled:opacity-50">
+                            <i class="bi bi-box-arrow-in-right text-2xl mb-2"></i>
+                            <span class="block">Punch In</span>
+                            <span v-if="lastPunchIn" class="text-xs mt-1">Last: {{lastPunchIn}}</span>
+                        </button>
+                        <button @click="punchOut" :disabled="!isPunchedIn"
+                                class="punch-btn flex-1 flex flex-col items-center justify-center bg-red-500 text-white p-4 rounded-lg disabled:opacity-50">
+                            <i class="bi bi-box-arrow-right text-2xl mb-2"></i>
+                            <span class="block">Punch Out</span>
+                            <span v-if="lastPunchOut" class="text-xs mt-1">Last: {{lastPunchOut}}</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Status Summary -->
+                <div class="bg-white p-6 rounded-lg shadow">
+                    <h2 class="text-xl font-semibold mb-4">Weekly Progress</h2>
+                    <div class="flex justify-between items-center">
+                        <div>
+                            <p class="text-gray-600">Hours Completed</p>
+                            <p class="text-2xl font-bold">{{hoursCompleted}}/{{weeklyTarget}} hrs</p>
+                            <p class="text-sm text-gray-500">Target adjusted for {{workingDaysThisWeek}} working days</p>
+                            <p v-if="remainingHours > 0" class="mt-2 text-sm" :class="remainingHours > 15 ? 'text-red-600' : 'text-amber-600'">
+                                <i class="bi bi-clock-history mr-1"></i> 
+                                {{remainingHours}} hours remaining
+                            </p>
+                        </div>
+                        <div class="w-32 h-32">
+                            <canvas id="progressChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Detailed Stats -->
+            <div class="grid md:grid-cols-3 gap-6 mb-8">
+                <div class="bg-white p-6 rounded-lg shadow">
+                    <h3 class="text-lg font-semibold mb-2">Today's Hours</h3>
+                    <p class="text-3xl font-bold">{{todayHours}}</p>
+                    <p class="text-sm text-gray-600">Hours worked today</p>
+                </div>
+                <div class="bg-white p-6 rounded-lg shadow">
+                    <h3 class="text-lg font-semibold mb-2">This Week</h3>
+                    <p class="text-3xl font-bold">{{weeklyHours}}</p>
+                    <p class="text-sm text-gray-600">Hours this week</p>
+                    <div class="mt-2 h-2 bg-gray-200 rounded-full overflow-hidden">
+                        <div class="h-full" 
+                             :style="`width: ${weeklyProgress}%; background-color: ${weeklyProgress > 90 ? '#10B981' : weeklyProgress > 60 ? '#FBBF24' : '#DC2626'}`"></div>
+                    </div>
+                </div>
+                <div class="bg-white p-6 rounded-lg shadow">
+                    <h3 class="text-lg font-semibold mb-2">Monthly Total</h3>
+                    <p class="text-3xl font-bold">{{monthlyHours}}</p>
+                    <p class="text-sm text-gray-600">Hours this month</p>
+                    <p class="text-xs text-gray-500 mt-2">Monthly Target: {{monthlyTarget}} hrs</p>
+                </div>
+            </div>
+
+            <!-- Recent Activity -->
+            <div class="bg-white p-6 rounded-lg shadow mb-8">
+                <h2 class="text-xl font-semibold mb-4">Recent Activity</h2>
+                <div class="overflow-x-auto">
+                    <table class="w-full">
+                        <thead>
+                            <tr class="border-b">
+                                <th class="text-left py-2">Date</th>
+                                <th class="text-left py-2">Punch In</th>
+                                <th class="text-left py-2">Punch Out</th>
+                                <th class="text-left py-2">Total Hours</th>
+                                <th class="text-left py-2">Location</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr v-for="log in recentLogs" :key="log.date" class="border-b">
+                                <td class="py-2">{{log.date}}</td>
+                                <td class="py-2">{{log.punchIn}}</td>
+                                <td class="py-2">{{log.punchOut}}</td>
+                                <td class="py-2">{{log.totalHours}}</td>
+                                <td class="py-2">
+                                    <span v-if="log.location" class="text-green-600">On Campus</span>
+                                    <span v-else>-</span>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Calendar View -->
+            <div class="bg-white p-6 rounded-lg shadow">
+                <h2 class="text-xl font-semibold mb-4">Monthly Calendar</h2>
+                <div class="grid grid-cols-7 gap-1 mb-2">
+                    <div v-for="day in ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']" class="text-center text-sm font-medium py-1">
+                        {{day}}
+                    </div>
+                </div>
+                <div class="grid grid-cols-7 gap-1">
+                    <div v-for="day in calendarDays" 
+                         :class="['border rounded-md h-14 p-1', 
+                                 day.isCurrentMonth ? 'bg-white' : 'bg-gray-50 text-gray-400',
+                                 day.isToday ? 'border-blue-500' : '',
+                                 day.isWeekend ? 'bg-gray-100' : '',
+                                 day.isHoliday ? 'bg-red-50' : '']">
+                        <div class="flex justify-between">
+                            <span class="text-sm">{{day.date}}</span>
+                            <span v-if="day.hours" class="text-xs bg-green-100 text-green-800 rounded px-1">
+                                {{day.hours}}h
+                            </span>
+                        </div>
+                        <div v-if="day.isHoliday" class="text-xs text-red-600 truncate">{{day.holidayName}}</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const { createApp } = Vue
+
+        createApp({
+            data() {
+                return {
+                    isLoggedIn: localStorage.getItem('isLoggedIn') === 'true',
+                    isPunchedIn: localStorage.getItem('isPunchedIn') === 'true',
+                    isAdminMode: localStorage.getItem('isAdminMode') === 'true',
+                    activeTab: 'login',
+                    adminTab: 'users',
+
+                    
+                    // Login forms
+                    loginForm: {
+                        email: '',
+                        password: ''
+                    },
+                    adminForm: {
+                        username: '',
+                        password: ''
+                    },
+                    
+                    // Captcha data
+                    captchaText: '',
+                    captchaInput: '',
+                    adminCaptchaText: '',
+                    adminCaptchaInput: '',
+                    
+                    // User data
+                    userData: JSON.parse(localStorage.getItem('userData')) || {
+                        name: 'DHEERAJ KHETWAL',
+                        role: 'Assistant Professor',
+                        email: 'dheeraj.khetwal@example.edu',
+                        department: 'Computer Science'
+                    },
+                    
+                    // Time tracking data
+                    hoursCompleted: 28,
+                    weeklyTarget: 35,
+                    todayHours: '6.5',
+                    weeklyHours: '28',
+                    monthlyHours: '112',
+                    monthlyTarget: 140,
+                    workingDaysThisWeek: 5,
+                    currentDate: new Date().toLocaleDateString('en-US', {
+                        weekday: 'long',
+                        year: 'numeric',
+                        month: 'long',
+                        day: 'numeric'
+                    }),
+                    lastPunchIn: localStorage.getItem('lastPunchIn') || '',
+                    lastPunchOut: localStorage.getItem('lastPunchOut') || '',
+                    remainingHours: 7,
+                    remainingDays: 2,
+                    showAlert: true,
+                    currentPunchInTime: null,
+                    currentPunchOutTime: null,
+                    
+                    // History logs
+                    recentLogs: JSON.parse(localStorage.getItem('recentLogs')) || [
+                        { date: '2023-11-20', punchIn: '09:00 AM', punchOut: '05:30 PM', totalHours: '8.5', location: true },
+                        { date: '2023-11-19', punchIn: '09:15 AM', punchOut: '05:00 PM', totalHours: '7.75', location: true },
+                        { date: '2023-11-18', punchIn: '09:30 AM', punchOut: '04:45 PM', totalHours: '7.25', location: true }
+                    ],
+                    
+                    // Calendar data
+                    calendarDays: [],
+                    
+                    // Admin data
+                    userList: [
+                        { id: 1, name: 'John Doe', email: 'john.doe@example.edu', role: 'Assistant Professor', department: 'Computer Science', weeklyTarget: 35 },
+                        { id: 2, name: 'Jane Smith', email: 'jane.smith@example.edu', role: 'Professor', department: 'Mathematics', weeklyTarget: 30 },
+                        { id: 3, name: 'Robert Johnson', email: 'robert.j@example.edu', role: 'Assistant Professor', department: 'Engineering', weeklyTarget: 35 },
+                        { id: 4, name: 'Emily Wilson', email: 'e.wilson@example.edu', role: 'Other', department: 'Computer Science', weeklyTarget: 25 }
+                    ],
+                    userSearchQuery: '',
+                    userFilterRole: '',
+                    showNewUserModal: false,
+                    editingUser: null,
+                    newUser: {
+                        name: '',
+                        email: '',
+                        role: 'Assistant Professor',
+                        department: 'Computer Science',
+                        weeklyTarget: 35,
+                        password: ''
+                    }
+                }
+            },
+            computed: {
+                weeklyProgress() {
+                    return Math.min(100, Math.round((this.hoursCompleted / this.weeklyTarget) * 100));
+                },
+                filteredUsers() {
+                    return this.userList.filter(user => {
+                        const matchesSearch = this.userSearchQuery === '' || 
+                                           user.name.toLowerCase().includes(this.userSearchQuery.toLowerCase()) ||
+                                           user.email.toLowerCase().includes(this.userSearchQuery.toLowerCase());
+                        
+                        const matchesRole = this.userFilterRole === '' || user.role === this.userFilterRole;
+                        
+                        return matchesSearch && matchesRole;
+                    });
+                }
+            },
+            mounted() {
+                this.showCaptcha();
+                this.showAdminCaptcha();
+                this.initProgressChart();
+                this.initAdminReportChart();
+                this.generateCalendarDays();
+                
+                // Check geolocation
+                if ("geolocation" in navigator) {
+                    console.log("Geolocation is available");
+                } else {
+                    console.log("Geolocation is not available");
+                }
+            },
+            methods: {
+                generateCaptcha() {
+                    return Math.random().toString(36).substring(2, 8).toUpperCase();
+                },
+                showCaptcha() {
+                    this.captchaText = this.generateCaptcha();
+                },
+                showAdminCaptcha() {
+                    this.adminCaptchaText = this.generateCaptcha();
+                },
+                login(e) {
+                    if (this.captchaInput.toUpperCase() !== this.captchaText) {
+                        Swal.fire({
+                            icon: 'error',
+                            title: 'Invalid Captcha',
+                            text: 'Please try again'
+                        });
+                        this.showCaptcha();
+                        this.captchaInput = '';
+                        return;
+                    }
+                    
+                    // Simulate login validation
+                    if (this.loginForm.email && this.loginForm.password) {
+                        this.isLoggedIn = true;
+                        localStorage.setItem('isLoggedIn', 'true');
+                        localStorage.setItem('userData', JSON.stringify(this.userData));
+                        
+                        Swal.fire({
+                            icon: 'success',
+                            title: 'Login Successful',
+                            text: `Welcome back, ${this.userData.name}!`,
+                            timer: 1500,
+                            showConfirmButton: false
+                        });
+                    } else {
+                        Swal.fire({
+                            icon: 'error',
+                            title: 'Login Failed',
+                            text: 'Invalid email or password'
+                        });
+                    }
+                },
+                adminLogin() {
+                    if (this.adminCaptchaInput.toUpperCase() !== this.adminCaptchaText) {
+                        Swal.fire({
+                            icon: 'error',
+                            title: 'Invalid Captcha',
+                            text: 'Please try again'
+                        });
+                        this.showAdminCaptcha();
+                        this.adminCaptchaInput = '';
+                        return;
+                    }
+                    
+                    // Simulate admin login validation
+                    if (this.adminForm.username === 'admin' && this.adminForm.password === 'admin123') {
+                        this.isAdminMode = true;
+                        localStorage.setItem('isAdminMode', 'true');
+                        Swal.fire({
+                            icon: 'success',
+                            title: 'Admin Login Successful',
+                            timer: 1500,
+                            showConfirmButton: false
+                        });
+                    } else {
+                        Swal.fire({
+                            icon: 'error',
+                            title: 'Login Failed',
+                            text: 'Invalid email or password'
+                        });
+                    }
+                },
+                adminLogin() {
+                    if (this.adminCaptchaInput.toUpperCase() !== this.adminCaptchaText) {
+                        Swal.fire({
+                            icon: 'error',
+                            title: 'Invalid Captcha',
+                            text: 'Please try again'
+                        });
+                        this.showAdminCaptcha();
+                        this.adminCaptchaInput = '';
+                        return;
+                    }
+                    
+                    // Simulate admin login validation
+                    if (this.adminForm.username === 'admin' && this.adminForm.password === 'admin123') {
+                        this.isAdminMode = true;
+                        Swal.fire({
+                            icon: 'success',
+                            title: 'Admin Login Successful',
+                            timer: 1500,
+                            showConfirmButton: false
+                        });
+                    } else {
+                        Swal.fire({
+                            icon: 'error',
+                            title: 'Admin Login Failed',
+                            text: 'Invalid credentials'
+                        });
+                    }
+                },
+                logout() {
+                    this.isLoggedIn = false;
+                    this.loginForm = { email: '', password: '' };
+                    this.captchaInput = '';
+                    this.showCaptcha();
+                },
+                logoutAdmin() {
+                    this.isAdminMode = false;
+                    this.adminForm = { username: '', password: '' };
+                    this.adminCaptchaInput = '';
+                    this.showAdminCaptcha();
+                },
+                forgotPassword() {
+                    Swal.fire({
+                        title: 'Reset Password',
+                        text: 'Enter your email address to reset password',
+                        input: 'email',
+                        inputPlaceholder: 'Enter your email address',
+                        showCancelButton: true,
+                        confirmButtonText: 'Send Reset Link',
+                        showLoaderOnConfirm: true,
+                        preConfirm: (email) => {
+                            return new Promise((resolve) => {
+                                setTimeout(() => {
+                                    resolve();
+                                }, 1500); // Simulate API call
+                            });
+                        }
+                    }).then((result) => {
+                        if (result.isConfirmed) {
+                            Swal.fire({
+                                icon: 'success',
+                                title: 'Reset Link Sent',
+                                text: 'Please check your email for password reset instructions'
+                            });
+                        }
+                    });
+                },
+                punchIn() {
+                    navigator.geolocation.getCurrentPosition((position) => {
+                        const campusLat = 28.910450;
+                        const campusLng =   77.710869;
+                        const radius = 500; 
+                        
+                        
+                        // Calculate distance between two points using Haversine formula
+                        const lat1 = position.coords.latitude;
+                        const lon1 = position.coords.longitude;
+                        const lat2 = campusLat;
+                        const lon2 = campusLng;
+                        
+                        const R = 6371e3; // Earth's radius in meters
+                        const φ1 = lat1 * Math.PI/180;
+                        const φ2 = lat2 * Math.PI/180;
+                        const Δφ = (lat2-lat1) * Math.PI/180;
+                        const Δλ = (lon2-lon1) * Math.PI/180;
+
+                        const a = Math.sin(Δφ/2) * Math.sin(Δφ/2) +
+                                Math.cos(φ1) * Math.cos(φ2) *
+                                Math.sin(Δλ/2) * Math.sin(Δλ/2);
+                        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+                        const distance = R * c;
+                        
+                        if (distance <= radius) {
+                            this.currentPunchInTime = new Date();
+                            this.isPunchedIn = true;
+                            this.lastPunchIn = this.currentPunchInTime.toLocaleTimeString('en-US', {
+                                hour: 'numeric',
+                                minute: 'numeric',
+                                hour12: true
+                            });
+                            Swal.fire({
+                                icon: 'success',
+                                title: 'Punched In Successfully',
+                                text: `Time: ${this.lastPunchIn}`,
+                                timer: 2000,
+                                showConfirmButton: false
+                            });
+                        } else {
+                            Swal.fire({
+                                icon: 'error',
+                                title: 'Location Error',
+                                text: 'You must be on campus to punch in. Please try again when you are within campus premises.'
+                            });
+                        }
+                    }, (error) => {
+                        Swal.fire({
+                            icon: 'error',
+                            title: 'Location Error',
+                            text: 'Please enable location services to use punch-in feature'
+                        });
+                    });
+                },
+                punchOut() {
+                    navigator.geolocation.getCurrentPosition((position) => {
+                        this.currentPunchOutTime = new Date(); 
+                        this.isPunchedIn = false;
+                        this.lastPunchOut = this.currentPunchOutTime.toLocaleTimeString('en-US', {
+                            hour: 'numeric',
+                            minute: 'numeric',
+                            hour12: true
+                        });
+                        
+
+                        //works hours calculation
+
+                        let hoursWorked = 0;
+                        if (this.currentPunchInTime) {
+                            const diffMs = this.currentPunchOutTime - this.currentPunchInTime;
+                            hoursWorked = (diffMs / (1000 * 60 * 60)).toFixed(2); // Convert ms to hours
+                        }
+    
+                        
+                        // Add to recent logs
+                        const today = new Date().toLocaleDateString('en-US', {
+                            year: 'numeric',
+                            month: '2-digit',
+                            day: '2-digit'
+                        });
+
+                        this.recentLogs.unshift({
+                            date: today,
+                            punchIn: this.lastPunchIn,
+                            punchOut: this.lastPunchOut,
+                            totalHours: hoursWorked,
+                            location: true
+                        });
+
+                        localStorage.setItem('recentLogs', JSON.stringify(this.recentLogs));
+
+                        this.hoursCompleted = parseFloat(this.hoursCompleted) + parseFloat(hoursWorked);
+                        
+                        // Calculate hours (simplified for demo)
+                        const hours = (Math.random() * 2 + 6).toFixed(2);
+                        
+                        // this.recentLogs.unshift({
+                        //     date: today,
+                        //     punchIn: this.lastPunchIn,
+                        //     punchOut: this.lastPunchOut,
+                        //     totalHours: hours,
+                        //     location: true
+                        // });
+                        
+                        Swal.fire({
+                            icon: 'success',
+                            title: 'Punched Out Successfully',
+                            text: `Time: ${this.lastPunchOut}`,
+                            timer: 2000,
+                            showConfirmButton: false
+                        });
+                        this.currentPunchInTime = null;
+                        this.currentPunchOutTime = null;
+                    },(err) => {
+                        Swal.fire({
+                            icon: 'error',
+                            title: 'Location Error',
+                            text: 'Please enable location services to use punch-out feature'
+                        });
+                    });
+                },
+                initProgressChart() {
+                    setTimeout(() => {
+                        const ctx = document.getElementById('progressChart');
+                        if (ctx) {
+                            new Chart(ctx, {
+                                type: 'doughnut',
+                                data: {
+                                    datasets: [{
+                                        data: [this.hoursCompleted, this.weeklyTarget - this.hoursCompleted],
+                                        backgroundColor: ['#10B981', '#E5E7EB']
+                                    }]
+                                },
+                                options: {
+                                    cutout: '80%',
+                                    responsive: true,
+                                    maintainAspectRatio: true,
+                                    plugins: {
+                                        legend: {
+                                            display: false
+                                        }
+                                    }
+                                }
+                            });
+                        }
+                    }, 100);
+                },
+                initAdminReportChart() {
+                    setTimeout(() => {
+                        const ctx = document.getElementById('adminReportChart');
+                        if (ctx) {
+                            new Chart(ctx, {
+                                type: 'bar',
+                                data: {
+                                    labels: ['CS Dept', 'Math Dept', 'Eng Dept', 'Physics Dept', 'Chemistry'],
+                                    datasets: [{
+                                        label: 'Avg. Weekly Hours',
+                                        data: [32, 28, 30, 25, 27],
+                                        backgroundColor: '#3b82f6'
+                                    }]
+                                },
+                                options: {
+                                    responsive: true,
+                                    maintainAspectRatio: false,
+                                    plugins: {
+                                        legend: {
+                                            position: 'top'
+                                        }
+                                    }
+                                }
+                            });
+                        }
+                    }, 100);
+                },
+                generateCalendarDays() {
+                    const today = new Date();
+                    const currentMonth = today.getMonth();
+                    const currentYear = today.getFullYear();
+                    
+                    // Get the first day of the month
+                    const firstDay = new Date(currentYear, currentMonth, 1);
+                    const startingDayOfWeek = firstDay.getDay();
+                    
+                    // Get the last day of the month
+                    const lastDay = new Date(currentYear, currentMonth + 1, 0);
+                    const totalDays = lastDay.getDate();
+                    
+                    // Generate calendar days
+                    const days = [];
+                    
+                    // Add previous month days to start
+                    const prevMonthLastDay = new Date(currentYear, currentMonth, 0).getDate();
+                    for (let i = startingDayOfWeek - 1; i >= 0; i--) {
+                        days.push({
+                            date: prevMonthLastDay - i,
+                            isCurrentMonth: false,
+                            isWeekend: false,
+                            isHoliday: false,
+                            isToday: false,
+                            hours: null
+                        });
+                    }
+                    
+                    // Add current month days
+                    for (let i = 1; i <= totalDays; i++) {
+                        const date = new Date(currentYear, currentMonth, i);
+                        const dayOfWeek = date.getDay();
+                        const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
+                        const isToday = i === today.getDate();
+                        
+                        // Add random hours for past days
+                        let hours = null;
+                        if (i < today.getDate()) {
+                            if (!isWeekend) {
+                                hours = (Math.random() * 3 + 6).toFixed(1);
+                            }
+                        }
+                        
+                        // Add holidays (for demonstration)
+                        let isHoliday = false;
+                        let holidayName = '';
+                        
+                        if (i === 15) {
+                            isHoliday = true;
+                            holidayName = 'Independence Day';
+                        } else if (i === 26) {
+                            isHoliday = true;
+                            holidayName = 'Republic Day';
+                        }
+                        
+                        days.push({
+                            date: i,
+                            isCurrentMonth: true,
+                            isWeekend,
+                            isHoliday,
+                            holidayName,
+                            isToday,
+                            hours
+                        });
+                    }
+                    
+                    // Add next month days to complete calendar
+                    const remainingDays = 42 - days.length; // 6 weeks * 7 days = 42
+                    for (let i = 1; i <= remainingDays; i++) {
+                        days.push({
+                            date: i,
+                            isCurrentMonth: false,
+                            isWeekend: false,
+                            isHoliday: false,
+                            isToday: false,
+                            hours: null
+                        });
+                    }
+                    
+                    this.calendarDays = days;
+                },
+                editUser(user) {
+                    this.editingUser = user;
+                    this.newUser = { ...user };
+                    this.showNewUserModal = true;
+                },
+                closeUserModal() {
+                    this.showNewUserModal = false;
+                    this.editingUser = null;
+                    this.newUser = {
+                        name: '',
+                        email: '',
+                        role: 'Assistant Professor',
+                        department: 'Computer Science',
+                        weeklyTarget: 35,
+                        password: ''
+                    };
+                },
+                saveUser() {
+                    if (this.editingUser) {
+                        // Update existing user
+                        const index = this.userList.findIndex(u => u.id === this.editingUser.id);
+                        if (index !== -1) {
+                            this.userList[index] = {...this.newUser};
+                        }
+                        Swal.fire({
+                            icon: 'success',
+                            title: 'User Updated',
+                            text: `${this.newUser.name}'s information has been updated.`,
+                            timer: 1500,
+                            showConfirmButton: false
+                        });
+                    } else {
+                        // Add new user
+                        const newId = Math.max(...this.userList.map(u => u.id), 0) + 1;
+                        this.userList.push({
+                            id: newId,
+                            ...this.newUser
+                        });
+                        Swal.fire({
+                            icon: 'success',
+                            title: 'User Added',
+                            text: `${this.newUser.name} has been added to faculty list.`,
+                            timer: 1500,
+                            showConfirmButton: false
+                        });
+                    }
+                    this.closeUserModal();
+                },
+                deleteUser(userId) {
+                    Swal.fire({
+                        title: 'Delete User?',
+                        text: 'This action cannot be undone.',
+                        icon: 'warning',
+                        showCancelButton: true,
+                        confirmButtonColor: '#d33',
+                        confirmButtonText: 'Yes, delete it!'
+                    }).then((result) => {
+                        if (result.isConfirmed) {
+                            this.userList = this.userList.filter(user => user.id !== userId);
+                            Swal.fire({
+                                icon: 'success',
+                                title: 'Deleted!',
+                                text: 'User has been deleted.',
+                                timer: 1500,
+                                showConfirmButton: false
+                            });
+                        }
+                    });
+                },
+                resetUserPassword(userId) {
+                    Swal.fire({
+                        title: 'Reset Password',
+                        input: 'text',
+                        inputLabel: 'New Password',
+                        inputPlaceholder: 'Enter new password',
+                        showCancelButton: true,
+                        confirmButtonText: 'Reset Password',
+                        showLoaderOnConfirm: true,
+                        preConfirm: (password) => {
+                            return new Promise((resolve) => {
+                                setTimeout(() => {
+                                    resolve();
+                                }, 1000); // Simulate API call
+                            });
+                        }
+                    }).then((result) => {
+                        if (result.isConfirmed) {
+                            Swal.fire({
+                                icon: 'success',
+                                title: 'Password Reset',
+                                text: 'The password has been reset successfully.',
+                                timer: 1500,
+                                showConfirmButton: false
+                            });
+                        }
+                    });
+                }
+            }
+        }).mount('#app')
+    </script>
+</body>
+</html>
